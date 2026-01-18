@@ -30,7 +30,6 @@ Tarot cards: ${cards.join(", ")}
 Question: ${question}
 
 Respond ONLY in ${language}.
-Do not explain tarot rules.
 Do not mention you are an AI.
 `
           }
@@ -40,7 +39,11 @@ Do not mention you are an AI.
 
     const data = await response.json();
 
-    const aiText = data.choices?.[0]?.message?.content;
+    console.log("XAI RAW RESPONSE:", JSON.stringify(data));
+
+    const aiText =
+      data?.choices?.[0]?.message?.content ??
+      "The cards are silent right now. Please try again.";
 
     return res.status(200).json({
       success: true,
@@ -49,6 +52,9 @@ Do not mention you are an AI.
 
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "AI request failed" });
+    return res.status(500).json({
+      success: false,
+      result: "Tarot spirits failed to respond."
+    });
   }
 }
