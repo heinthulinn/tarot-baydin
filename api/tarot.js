@@ -26,45 +26,33 @@ function normalizeLanguage(lang) {
   return "en";
 }
 
-function getLanguageInstruction(lang) {
+function getLanguageName(lang) {
   switch (lang) {
-    case "my":
-      return `
-You MUST respond ONLY in Myanmar (Burmese) language.
-Use proper Myanmar Unicode script.
-DO NOT use English.
-DO NOT mix languages.
-`;
-    case "th":
-      return `
-You MUST respond ONLY in Thai language.
-DO NOT use English.
-`;
-    case "ja":
-      return `
-You MUST respond ONLY in Japanese language.
-DO NOT use English.
-`;
-    case "zh":
-      return `
-You MUST respond ONLY in Chinese language.
-DO NOT use English.
-`;
-    case "ko":
-      return `
-You MUST respond ONLY in Korean language.
-DO NOT use English.
-`;
-    case "vi":
-      return `
-You MUST respond ONLY in Vietnamese language.
-DO NOT use English.
-`;
-    default:
-      return `
-Respond in English.
-`;
+    case "my": return "Myanmar (Burmese)";
+    case "th": return "Thai";
+    case "ja": return "Japanese";
+    case "zh": return "Chinese";
+    case "ko": return "Korean";
+    case "vi": return "Vietnamese";
+    default: return "English";
   }
+}
+
+async function callXAI(messages) {
+  const response = await fetch("https://api.x.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.XAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "grok-4-latest",
+      messages
+    })
+  });
+
+  const data = await response.json();
+  return data?.choices?.[0]?.message?.content || "";
 }
 
 export default async function handler(req, res) {
@@ -79,53 +67,64 @@ export default async function handler(req, res) {
   }
 
   const normalizedLang = normalizeLanguage(language);
-  const languageInstruction = getLanguageInstruction(normalizedLang);
+  const targetLanguageName = getLanguageName(normalizedLang);
 
   try {
-    const response = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.XAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "grok-4-latest",
-        messages: [
-          {
-            role: "system",
-            content: `
+    // ---------- STEP 1: Generate tarot reading (English OK)
+    const tarotText = await callXAI([
+      {
+        role: "system",
+        content: `
 You are a professional tarot reader.
 Speak in a mystical, calm, and insightful tone.
-${languageInstruction}
 Do not mention you are an AI.
 `
-          },
-          {
-            role: "user",
-            content: `
+      },
+      {
+        role: "user",
+        content: `
 Tarot cards: ${cards.join(", ")}
 Question: ${question}
 `
-          }
-        ]
-      })
-    });
+      }
+    ]);
 
-    const data = await response.json();
+    if (!tarotText) {
+      throw new Error("Empty tarot response");
+    }
 
-    console.log("XAI RAW RESPONSE:", JSON.stringify(data));
+    // ---------- STEP 2: Translate if needed
+    let finalText = tarotText;
 
-    const aiText =
-      data?.choices?.[0]?.message?.content ??
-      "The cards are silent right now. Please try again.";
+    if (normalizedLang !== "en") {
+      finalText = await callXAI([
+        {
+          role: "system",
+          content: `
+You are a professional translator.
+Translate the text into ${targetLanguageName}.
+
+RULES:
+- Output ONLY the translated text
+- Use correct native Unicode script
+- Do NOT add explanations
+- Do NOT include English
+`
+        },
+        {
+          role: "user",
+          content: tarotText
+        }
+      ]);
+    }
 
     return res.status(200).json({
       success: true,
-      result: aiText
+      result: finalText
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("TAROT ERROR:", err);
     return res.status(500).json({
       success: false,
       result: "Tarot spirits failed to respond."
