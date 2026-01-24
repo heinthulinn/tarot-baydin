@@ -2,26 +2,14 @@
 
 function normalizeLanguage(lang) {
   if (!lang) return "en";
-
   lang = lang.toLowerCase();
 
-  if (lang === "my" || lang === "my-mm" || lang === "burmese" || lang === "myanmar")
-    return "my";
-
-  if (lang === "th" || lang === "th-th" || lang === "thai")
-    return "th";
-
-  if (lang === "ja" || lang === "ja-jp" || lang === "japanese")
-    return "ja";
-
-  if (lang === "zh" || lang.startsWith("zh"))
-    return "zh";
-
-  if (lang === "ko" || lang === "ko-kr")
-    return "ko";
-
-  if (lang === "vi" || lang === "vi-vn")
-    return "vi";
+  if (lang === "my" || lang === "my-mm" || lang === "burmese" || lang === "myanmar") return "my";
+  if (lang === "th" || lang === "th-th" || lang === "thai") return "th";
+  if (lang === "ja" || lang === "ja-jp" || lang === "japanese") return "ja";
+  if (lang === "zh" || lang.startsWith("zh")) return "zh";
+  if (lang === "ko" || lang === "ko-kr") return "ko";
+  if (lang === "vi" || lang === "vi-vn") return "vi";
 
   return "en";
 }
@@ -60,31 +48,81 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { cards, question, language } = req.body;
+  // ✅ NEW INPUT MODEL
+  const {
+    name,
+    dob,
+    sex,
+    category,
+    customQuestion,
+    cards,
+    language
+  } = req.body;
 
-  if (!cards || !question || !language) {
-    return res.status(400).json({ error: "Missing fields" });
+  // ✅ STRONG VALIDATION
+  if (
+    !name ||
+    !dob ||
+    !sex ||
+    !category ||
+    !cards ||
+    !Array.isArray(cards) ||
+    cards.length === 0 ||
+    !language
+  ) {
+    return res.status(400).json({
+      success: false,
+      result: "Missing required fields"
+    });
   }
 
   const normalizedLang = normalizeLanguage(language);
   const targetLanguageName = getLanguageName(normalizedLang);
 
   try {
-    // ---------- STEP 1: Generate tarot reading (English OK)
+    // =========================
+    // STEP 1: TAROT DESTINY READ
+    // =========================
     const tarotText = await callXAI([
       {
         role: "system",
         content: `
-You are a professional tarot reader.
-Speak in a mystical, calm, and insightful tone.
-Do not mention you are an AI.
+You are an ancient Tarot Master and Destiny Oracle.
+
+You are a spiritual guide who interprets tarot cards, birth energy,
+life paths, destiny flow, and soul lessons.
+
+RULES:
+- Never say you are an AI
+- Never mention models, APIs, or systems
+- Speak in mystical, calm, wise language
+- No disclaimers
+- No technical explanations
+
+OUTPUT STRUCTURE:
+1. 🧍 Personal Energy Reading
+2. 🃏 Tarot Card Interpretation
+3. 🌙 Destiny Path
+4. 🔮 Hidden Influences
+5. ⚠️ Warnings
+6. ✨ Guidance
+7. 🧭 Direction Forward
 `
       },
       {
         role: "user",
         content: `
-Tarot cards: ${cards.join(", ")}
-Question: ${question}
+Name: ${name}
+Date of Birth: ${dob}
+Sex: ${sex}
+
+Life Category: ${category}
+Question: ${customQuestion || "No specific question"}
+
+Selected Tarot Cards:
+${cards.join(", ")}
+
+Interpret this destiny using ancient tarot wisdom.
 `
       }
     ]);
@@ -93,15 +131,18 @@ Question: ${question}
       throw new Error("Empty tarot response");
     }
 
-    // ---------- STEP 2: Translate if needed
+    // =========================
+    // STEP 2: TRANSLATION
+    // =========================
     let finalText = tarotText;
 
     if (normalizedLang !== "en") {
-      finalText = await callXAI([
+      const translated = await callXAI([
         {
           role: "system",
           content: `
 You are a professional translator.
+
 Translate the text into ${targetLanguageName}.
 
 RULES:
@@ -116,8 +157,13 @@ RULES:
           content: tarotText
         }
       ]);
+
+      if (translated) finalText = translated;
     }
 
+    // =========================
+    // RESPONSE
+    // =========================
     return res.status(200).json({
       success: true,
       result: finalText
