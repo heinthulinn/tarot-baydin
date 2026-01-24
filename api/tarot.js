@@ -100,7 +100,7 @@ export default async function handler(req, res) {
 
   try {
     // =========================
-    // STEP 1: TAROT READING
+    // TAROT READING (SINGLE CALL)
     // =========================
     const tarotText = await callXAI([
       {
@@ -110,6 +110,10 @@ You are an ancient Tarot Master and Destiny Oracle.
 
 You are a spiritual guide who interprets tarot cards, birth energy,
 life paths, destiny flow, and soul lessons.
+
+IMPORTANT:
+- Respond ONLY in ${targetLanguageName}
+- Do NOT include English
 
 RULES:
 - Never say you are an AI
@@ -151,41 +155,11 @@ Interpret this destiny using ancient tarot wisdom.
     }
 
     // =========================
-    // STEP 2: TRANSLATION
-    // =========================
-    let finalText = tarotText;
-
-    if (normalizedLang !== "en") {
-      const translated = await callXAI([
-        {
-          role: "system",
-          content: `
-You are a professional translator.
-
-Translate the text into ${targetLanguageName}.
-
-RULES:
-- Output ONLY the translated text
-- Use correct native Unicode script
-- Do NOT add explanations
-- Do NOT include English
-`
-        },
-        {
-          role: "user",
-          content: tarotText
-        }
-      ]);
-
-      if (translated) finalText = translated;
-    }
-
-    // =========================
     // RESPONSE
     // =========================
     return res.status(200).json({
       success: true,
-      result: finalText
+      result: tarotText
     });
 
   } catch (err) {
