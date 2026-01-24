@@ -1,5 +1,21 @@
 // /api/tarot.js
 
+export default async function handler(req, res) {
+
+  // ✅ ADD THIS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // ✅ ADD THIS
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  // 👇 keep ALL your existing code below
+}
+
+
 function normalizeLanguage(lang) {
   if (!lang) return "en";
   lang = lang.toLowerCase();
