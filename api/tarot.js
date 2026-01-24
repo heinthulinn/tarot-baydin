@@ -1,6 +1,9 @@
 // /api/tarot.js
 import fetch from "node-fetch";
+
 export default async function handler(req, res) {
+  console.log("🔥 /tarot HIT");
+  console.log("METHOD:", req.method);
 
   // =========================
   // CORS (MUST BE FIRST)
@@ -9,7 +12,18 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+  if (req.method === "OPTIONS") {
+    console.log("🟡 OPTIONS preflight");
+    return res.status(200).end();
+  }
 
+  if (req.method !== "POST") {
+    console.log("❌ Invalid method");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  console.log("HEADERS:", req.headers);
+  console.log("BODY:", req.body);
 
   // =========================
   // HELPERS
@@ -41,6 +55,8 @@ export default async function handler(req, res) {
   }
 
   async function callXAI(messages) {
+    console.log("📡 Calling XAI API...");
+
     const response = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -53,7 +69,11 @@ export default async function handler(req, res) {
       })
     });
 
+    console.log("📡 XAI status:", response.status);
+
     const data = await response.json();
+    console.log("📡 XAI raw response:", data);
+
     return data?.choices?.[0]?.message?.content || "";
   }
 
@@ -68,7 +88,7 @@ export default async function handler(req, res) {
     customQuestion,
     cards,
     language
-  } = req.body;
+  } = req.body || {};
 
   // =========================
   // VALIDATION
@@ -83,6 +103,7 @@ export default async function handler(req, res) {
     cards.length === 0 ||
     !language
   ) {
+    console.log("❌ Validation failed");
     return res.status(400).json({
       success: false,
       result: "Missing required fields"
@@ -93,37 +114,17 @@ export default async function handler(req, res) {
   const targetLanguageName = getLanguageName(normalizedLang);
 
   try {
-    // =========================
-    // TAROT READING (SINGLE CALL)
-    // =========================
+    console.log("🃏 Generating tarot reading...");
+
     const tarotText = await callXAI([
       {
         role: "system",
         content: `
 You are an ancient Tarot Master and Destiny Oracle.
 
-You are a spiritual guide who interprets tarot cards, birth energy,
-life paths, destiny flow, and soul lessons.
-
 IMPORTANT:
 - Respond ONLY in ${targetLanguageName}
 - Do NOT include English
-
-RULES:
-- Never say you are an AI
-- Never mention models, APIs, or systems
-- Speak in mystical, calm, wise language
-- No disclaimers
-- No technical explanations
-
-OUTPUT STRUCTURE:
-1. 🧍 Personal Energy Reading
-2. 🃏 Tarot Card Interpretation
-3. 🌙 Destiny Path
-4. 🔮 Hidden Influences
-5. ⚠️ Warnings
-6. ✨ Guidance
-7. 🧭 Direction Forward
 `
       },
       {
@@ -132,14 +133,9 @@ OUTPUT STRUCTURE:
 Name: ${name}
 Date of Birth: ${dob}
 Sex: ${sex}
-
 Life Category: ${category}
 Question: ${customQuestion || "No specific question"}
-
-Selected Tarot Cards:
-${cards.join(", ")}
-
-Interpret this destiny using ancient tarot wisdom.
+Cards: ${cards.join(", ")}
 `
       }
     ]);
@@ -148,16 +144,15 @@ Interpret this destiny using ancient tarot wisdom.
       throw new Error("Empty tarot response");
     }
 
-    // =========================
-    // RESPONSE
-    // =========================
+    console.log("✅ Tarot success");
+
     return res.status(200).json({
       success: true,
       result: tarotText
     });
 
   } catch (err) {
-    console.error("TAROT ERROR:", err);
+    console.error("❌ TAROT ERROR:", err);
     return res.status(500).json({
       success: false,
       result: "Tarot spirits failed to respond."
