@@ -1,143 +1,133 @@
-// /api/tarot.js
-import fetch from "node-fetch";
+//import fetch from "node-fetch";
 
-export default async function handler(req, res) {
-  console.log("🔥 /tarot HIT");
-
-  // =========================
-  // CORS
-  // =========================
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+export default async function tarotHandler(req, res) {
+  const requestStart = Date.now();
 
   // =========================
-  // HELPERS
-  // =========================
-  function normalizeLanguage(lang) {
-    if (!lang) return "en";
-    lang = lang.toLowerCase();
-    if (lang === "my" || lang === "my-mm" || lang === "burmese" || lang === "myanmar") return "my";
-    if (lang === "th" || lang === "th-th" || lang === "thai") return "th";
-    if (lang === "ja" || lang === "ja-jp" || lang === "japanese") return "ja";
-    if (lang === "zh" || lang.startsWith("zh")) return "zh";
-    if (lang === "ko" || lang === "ko-kr") return "ko";
-    if (lang === "vi" || lang === "vi-vn") return "vi";
-    return "en";
-  }
-
-  function getLanguageName(lang) {
-    switch (lang) {
-      case "my": return "Myanmar (Burmese)";
-      case "th": return "Thai";
-      case "ja": return "Japanese";
-      case "zh": return "Chinese";
-      case "ko": return "Korean";
-      case "vi": return "Vietnamese";
-      default: return "English";
-    }
-  }
-
-  // =========================
-  // INPUT & VALIDATION
+  // BASIC VALIDATION
   // =========================
   const { name, dob, sex, category, customQuestion, cards, language } = req.body || {};
 
-  if (!name || !dob || !sex || !category || !cards || !Array.isArray(cards) || !language) {
+  if (!name || !dob || !sex || !category || !Array.isArray(cards) || !language) {
     return res.status(400).json({ success: false, result: "Missing required fields" });
   }
 
-  const normalizedLang = normalizeLanguage(language);
-  const targetLanguageName = getLanguageName(normalizedLang);
+  // =========================
+  // SERVER LOG (USER REQUEST)
+  // =========================
+  console.log("🧑 USER REQUEST");
+  console.log({
+    name,
+    dob,
+    sex,
+    category,
+    cards,
+    language,
+    time: new Date().toISOString()
+  });
 
-  // Log request details
-  console.log(`📋 Request: ${name} | ${category} | ${cards.length} cards | ${normalizedLang}`);
+  if (!process.env.XAI_API_KEY) {
+    return res.status(500).json({ success: false, result: "API key missing" });
+  }
 
   try {
-    const startTime = Date.now();
-    console.log(`🃏 Starting reading for ${name}...`);
-
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-    const response = await fetch("https://api.x.ai/v1/chat/completions", {
+    // =================================================
+    // STEP 1 — TAROT READING (ENGLISH ONLY, FAST)
+    // =================================================
+    const tarotResponse = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${process.env.XAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "grok-4-latest",
-        temperature: 0.7, // Slightly lower for more focused responses
-        max_tokens: 1500, // Limit response length for faster generation
+        model: "grok-beta",
+        temperature: 0.6,
+        max_tokens: 600,
         messages: [
           {
             role: "system",
-            content: `You are a wise Tarot Master. Give a clear, meaningful reading in ${targetLanguageName} only. 
-
-RULES:
-- Write in ${targetLanguageName} ONLY. No English.
-- Keep it focused and meaningful (3-4 paragraphs max).
-- Weave the cards (${cards.join(", ")}) into a flowing story, not a list.
-- Address ${name}'s question about ${category}: "${customQuestion}"
-- End with brief, actionable advice.
-- Use ${name}'s name naturally 2-3 times.
-- Be compassionate but direct.`
+            content:
+              "You are a professional Tarot Master. Give a clear tarot reading in ENGLISH ONLY. No translation. No emojis. 2 short paragraphs."
           },
           {
             role: "user",
-            content: `I am ${name} (${dob}, ${sex}). My question: "${customQuestion}" in ${category}. Cards: ${cards.join(", ")}.`
+            content: `Name: ${name}
+DOB: ${dob}
+Sex: ${sex}
+Category: ${category}
+Question: ${customQuestion}
+Cards: ${cards.join(", ")}`
           }
         ]
-      }),
-      signal: controller.signal
+      })
     });
 
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("❌ X.AI API Error:", response.status, errorData);
-      throw new Error(`API returned ${response.status}`);
+    if (!tarotResponse.ok) {
+      const t = await tarotResponse.text();
+      throw new Error("Tarot API failed: " + t);
     }
 
-    const data = await response.json();
-    let tarotText = data?.choices?.[0]?.message?.content || "";
+    const tarotData = await tarotResponse.json();
+    const englishReading = tarotData?.choices?.[0]?.message?.content?.trim();
 
-    if (!tarotText) throw new Error("Empty response from API");
+    if (!englishReading) throw new Error("Empty tarot result");
 
-    // Clean up response - remove any markdown formatting if present
-    tarotText = tarotText.trim();
-    
-    // Limit response length if too long (safety check)
-    if (tarotText.length > 3000) {
-      tarotText = tarotText.substring(0, 3000) + "...";
+    // =================================================
+    // STEP 2 — TRANSLATION (VERY FAST)
+    // =================================================
+    let finalResult = englishReading;
+
+    if (language.toLowerCase() !== "en") {
+      const translateResponse = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.XAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "grok-beta",
+          temperature: 0,
+          max_tokens: 700,
+          messages: [
+            {
+              role: "system",
+              content:
+                "Translate the following text exactly. Do NOT add meaning. Do NOT interpret."
+            },
+            {
+              role: "user",
+              content: `Translate into ${language}:\n\n${englishReading}`
+            }
+          ]
+        })
+      });
+
+      if (!translateResponse.ok) {
+        const t = await translateResponse.text();
+        throw new Error("Translation failed: " + t);
+      }
+
+      const translateData = await translateResponse.json();
+      finalResult = translateData?.choices?.[0]?.message?.content?.trim();
     }
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ Reading complete (${tarotText.length} chars, ${duration}ms)`);
-    return res.status(200).json({ success: true, result: tarotText });
+    // =========================
+    // FINAL LOG
+    // =========================
+    const duration = Date.now() - requestStart;
+    console.log(`✅ TAROT DONE in ${duration}ms`);
+
+    return res.status(200).json({
+      success: true,
+      result: finalResult
+    });
 
   } catch (err) {
-    console.error("❌ TAROT ERROR:", err);
-    
-    // More specific error messages
-    let errorMessage = "The connection was interrupted. Please try again.";
-    if (err.name === 'AbortError') {
-      errorMessage = "The reading took too long. Please try again.";
-    } else if (err.message.includes('API')) {
-      errorMessage = "Service temporarily unavailable. Please try again later.";
-    }
-    
-    return res.status(500).json({ success: false, result: errorMessage });
+    console.error("❌ TAROT ERROR:", err.message);
+    return res.status(500).json({
+      success: false,
+      result: "Tarot service failed. Please try again."
+    });
   }
 }
