@@ -1,173 +1,121 @@
-// =========================
-// HELPER: FORCE FULL RESPONSE
-// =========================
-async function completeChat(messages, model, temperature = 0.6) {
-  let fullText = "";
-  let rounds = 0;
+// import fetch from "node-fetch";
 
-  while (rounds < 6) {
-    rounds++;
+export default async function tarotHandler(req, res) {
+  const requestStart = Date.now();
 
-    const res = await fetch("https://api.x.ai/v1/chat/completions", {
+  // =========================
+  // BASIC VALIDATION
+  // =========================
+  const { name, dob, sex, category, customQuestion, cards, language } = req.body || {};
+
+  if (!name || !dob || !sex || !category || !Array.isArray(cards) || !language) {
+    return res.status(400).json({ success: false, result: "Missing required fields" });
+  }
+
+  // =========================
+  // SERVER LOG (USER REQUEST)
+  // =========================
+  console.log("🧑 USER REQUEST", {
+    name,
+    dob,
+    sex,
+    category,
+    cards,
+    language,
+    time: new Date().toISOString()
+  });
+
+  if (!process.env.XAI_API_KEY) {
+    return res.status(500).json({ success: false, result: "API key missing" });
+  }
+
+  try {
+    // =================================================
+    // STEP 1 — TAROT READING (ENGLISH ONLY)
+    // =================================================
+    const tarotResponse = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${process.env.XAI_API_KEY}`
       },
       body: JSON.stringify({
-        model,
-        temperature,
-        max_tokens: 800,
-        messages
-      })
-    });
-
-    if (!res.ok) {
-      throw new Error(await res.text());
-    }
-
-    const data = await res.json();
-    const chunk = data?.choices?.[0]?.message?.content || "";
-
-    if (!chunk) break;
-
-    fullText += chunk;
-
-    // ✅ Stop if response looks finished
-    if (
-      chunk.trim().endsWith(".") ||
-      chunk.trim().endsWith("!") ||
-      chunk.trim().endsWith("?") ||
-      chunk.trim().endsWith("။")
-    ) {
-      break;
-    }
-
-    // 🔁 Ask model to continue cleanly
-    messages.push({ role: "assistant", content: chunk });
-    messages.push({
-      role: "user",
-      content: "Continue from exactly where you stopped. Do NOT repeat. Finish all remaining sections."
-    });
-  }
-
-  return fullText.trim();
-}
-
-// =========================
-// MAIN TAROT HANDLER
-// =========================
-export default async function tarotHandler(req, res) {
-  const startTime = Date.now();
-
-  const { name, dob, sex, category, customQuestion, cards, language } = req.body || {};
-
-  // =========================
-  // VALIDATION
-// =========================
-  if (!name || !dob || !sex || !category || !Array.isArray(cards) || !language) {
-    return res.status(400).json({
-      success: false,
-      result: "Missing required fields"
-    });
-  }
-
-  if (!process.env.XAI_API_KEY) {
-    return res.status(500).json({
-      success: false,
-      result: "API key missing"
-    });
-  }
-
-  try {
-    // =========================
-    // STEP 1 — TAROT (ENGLISH)
-    // =========================
-    const tarotMessages = [
-      {
-        role: "system",
-        content: `
-You are a modern Tarot Master and intuitive life & business reader.
-
-Write a FULL, detailed tarot reading in ENGLISH ONLY.
-Use emojis to clearly separate sections.
-Use headings and bullet points where helpful.
-Speak directly to the person by name.
-Be practical, motivational, and specific.
-
-You MUST include ALL sections below, in order:
-
-🌊 Person Vibe — based on birth energy and personality  
-🃏 Drawn Card(s) — meaning and symbolism  
-💼 Business / Life Energy — what this period is about  
-💰 Money Flow — how money comes or blocks  
-⚠ Biggest Risk — warning or shadow  
-⭐ Lucky Areas — where success is strong  
-📆 Timeline Feel — early / mid / late period  
-💬 Final Message — direct advice
-
-Do NOT summarize.
-Do NOT rush.
-Finish every section fully.
-End naturally only when the reading is complete.
-        `.trim()
-      },
-      {
-        role: "user",
-        content: `
-Name: ${name}
+        model: "grok-4-1-fast-non-reasoning",
+        temperature: 0.6,
+        max_tokens: 600,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a professional Tarot Master. Give a clear tarot reading in ENGLISH ONLY. No translation. No emojis. 2 short paragraphs."
+          },
+          {
+            role: "user",
+            content: `Name: ${name}
 DOB: ${dob}
 Sex: ${sex}
 Category: ${category}
 Question: ${customQuestion || "None"}
-Cards: ${cards.join(", ")}
-        `.trim()
-      }
-    ];
+Cards: ${cards.join(", ")}`
+          }
+        ]
+      })
+    });
 
-    const englishReading = await completeChat(
-      tarotMessages,
-      "grok-4-1-fast-non-reasoning",
-      0.7
-    );
-
-    if (!englishReading) {
-      throw new Error("Empty tarot result");
+    if (!tarotResponse.ok) {
+      const t = await tarotResponse.text();
+      throw new Error("Tarot API failed: " + t);
     }
 
-    // =========================
-    // STEP 2 — TRANSLATION
-    // =========================
+    const tarotData = await tarotResponse.json();
+    const englishReading = tarotData?.choices?.[0]?.message?.content?.trim();
+
+    if (!englishReading) throw new Error("Empty tarot result");
+
+    // =================================================
+    // STEP 2 — TRANSLATION (ONLY IF NEEDED)
+    // =================================================
     let finalResult = englishReading;
 
     if (language.toLowerCase() !== "en") {
-      const translateMessages = [
-        {
-          role: "system",
-          content: `
-Translate the following text COMPLETELY.
-Preserve emojis, headings, paragraphs, tone, and meaning.
-Do NOT summarize.
-Do NOT shorten.
-          `.trim()
+      const translateResponse = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.XAI_API_KEY}`
         },
-        {
-          role: "user",
-          content: `Translate into ${language}:\n\n${englishReading}`
-        }
-      ];
+        body: JSON.stringify({
+          model: "grok-4-1-fast-non-reasoning",
+          temperature: 0,
+          max_tokens: 700,
+          messages: [
+            {
+              role: "system",
+              content:
+                "Translate the following text exactly. Do NOT add meaning. Do NOT interpret."
+            },
+            {
+              role: "user",
+              content: `Translate into ${language}:\n\n${englishReading}`
+            }
+          ]
+        })
+      });
 
-      finalResult = await completeChat(
-        translateMessages,
-        "grok-4-1-fast-non-reasoning",
-        0
-      );
+      if (!translateResponse.ok) {
+        const t = await translateResponse.text();
+        throw new Error("Translation failed: " + t);
+      }
+
+      const translateData = await translateResponse.json();
+      finalResult = translateData?.choices?.[0]?.message?.content?.trim();
     }
 
     // =========================
-    // DONE
+    // FINAL LOG give 
     // =========================
-    console.log(`✅ TAROT DONE in ${Date.now() - startTime}ms`);
+    const duration = Date.now() - requestStart;
+    console.log(`✅ TAROT DONE in ${duration}ms`);
 
     return res.status(200).json({
       success: true,
@@ -175,7 +123,7 @@ Do NOT shorten.
     });
 
   } catch (err) {
-    console.error("❌ TAROT ERROR:", err);
+    console.error("❌ TAROT ERROR FULL:", err);
     return res.status(500).json({
       success: false,
       result: err.message || "Tarot service failed"
