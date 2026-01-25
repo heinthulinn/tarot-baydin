@@ -41,7 +41,7 @@ export default async function tarotHandler(req, res) {
         "Authorization": `Bearer ${process.env.XAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "grok-beta",
+        model: "grok-2-latest",
         temperature: 0.6,
         max_tokens: 600,
         messages: [
@@ -124,10 +124,11 @@ Cards: ${cards.join(", ")}`
     });
 
   } catch (err) {
-    console.error("❌ TAROT ERROR:", err.message);
+    console.error("❌ TAROT ERROR FULL:", err);
     return res.status(500).json({
       success: false,
-      result: "Tarot service failed. Please try again."
+      result: err.message || "Tarot service failed"
     });
   }
+  
 }
