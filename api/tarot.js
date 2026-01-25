@@ -1,4 +1,4 @@
-//import fetch from "node-fetch";
+// import fetch from "node-fetch";
 
 export default async function tarotHandler(req, res) {
   const requestStart = Date.now();
@@ -15,8 +15,7 @@ export default async function tarotHandler(req, res) {
   // =========================
   // SERVER LOG (USER REQUEST)
   // =========================
-  console.log("🧑 USER REQUEST");
-  console.log({
+  console.log("🧑 USER REQUEST", {
     name,
     dob,
     sex,
@@ -32,7 +31,7 @@ export default async function tarotHandler(req, res) {
 
   try {
     // =================================================
-    // STEP 1 — TAROT READING (ENGLISH ONLY, FAST)
+    // STEP 1 — TAROT READING (ENGLISH ONLY)
     // =================================================
     const tarotResponse = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
@@ -41,7 +40,7 @@ export default async function tarotHandler(req, res) {
         "Authorization": `Bearer ${process.env.XAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "grok-4.1-fast",
+        model: "grok-4-1-fast-non-reasoning",
         temperature: 0.6,
         max_tokens: 600,
         messages: [
@@ -56,7 +55,7 @@ export default async function tarotHandler(req, res) {
 DOB: ${dob}
 Sex: ${sex}
 Category: ${category}
-Question: ${customQuestion}
+Question: ${customQuestion || "None"}
 Cards: ${cards.join(", ")}`
           }
         ]
@@ -74,7 +73,7 @@ Cards: ${cards.join(", ")}`
     if (!englishReading) throw new Error("Empty tarot result");
 
     // =================================================
-    // STEP 2 — TRANSLATION (VERY FAST)
+    // STEP 2 — TRANSLATION (ONLY IF NEEDED)
     // =================================================
     let finalResult = englishReading;
 
@@ -86,7 +85,7 @@ Cards: ${cards.join(", ")}`
           "Authorization": `Bearer ${process.env.XAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: "grok-beta",
+          model: "grok-4-1-fast-non-reasoning",
           temperature: 0,
           max_tokens: 700,
           messages: [
@@ -130,5 +129,4 @@ Cards: ${cards.join(", ")}`
       result: err.message || "Tarot service failed"
     });
   }
-  
 }
