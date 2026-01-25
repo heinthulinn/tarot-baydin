@@ -1,13 +1,11 @@
-// import fetch from "node-fetch";
-
 // =========================
-// HELPER: AUTO-COMPLETE RESPONSE
+// HELPER: FORCE FULL RESPONSE
 // =========================
-async function completeChat(messages, model, temperature = 0) {
+async function completeChat(messages, model, temperature = 0.6) {
   let fullText = "";
   let rounds = 0;
 
-  while (rounds < 5) {
+  while (rounds < 6) {
     rounds++;
 
     const res = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -19,7 +17,7 @@ async function completeChat(messages, model, temperature = 0) {
       body: JSON.stringify({
         model,
         temperature,
-        max_tokens: 600,
+        max_tokens: 800,
         messages
       })
     });
@@ -31,23 +29,25 @@ async function completeChat(messages, model, temperature = 0) {
     const data = await res.json();
     const chunk = data?.choices?.[0]?.message?.content || "";
 
+    if (!chunk) break;
+
     fullText += chunk;
 
-    // Stop if response looks complete
+    // ✅ Stop if response looks finished
     if (
-      chunk.endsWith(".") ||
-      chunk.endsWith("!") ||
-      chunk.endsWith("?") ||
-      chunk.endsWith("။")
+      chunk.trim().endsWith(".") ||
+      chunk.trim().endsWith("!") ||
+      chunk.trim().endsWith("?") ||
+      chunk.trim().endsWith("။")
     ) {
       break;
     }
 
-    // Ask to continue
+    // 🔁 Ask model to continue cleanly
     messages.push({ role: "assistant", content: chunk });
     messages.push({
       role: "user",
-      content: "Continue from the last sentence. Do not repeat."
+      content: "Continue from exactly where you stopped. Do NOT repeat. Finish all remaining sections."
     });
   }
 
@@ -55,19 +55,28 @@ async function completeChat(messages, model, temperature = 0) {
 }
 
 // =========================
-// MAIN HANDLER
+// MAIN TAROT HANDLER
 // =========================
 export default async function tarotHandler(req, res) {
-  const requestStart = Date.now();
+  const startTime = Date.now();
 
   const { name, dob, sex, category, customQuestion, cards, language } = req.body || {};
 
+  // =========================
+  // VALIDATION
+// =========================
   if (!name || !dob || !sex || !category || !Array.isArray(cards) || !language) {
-    return res.status(400).json({ success: false, result: "Missing required fields" });
+    return res.status(400).json({
+      success: false,
+      result: "Missing required fields"
+    });
   }
 
   if (!process.env.XAI_API_KEY) {
-    return res.status(500).json({ success: false, result: "API key missing" });
+    return res.status(500).json({
+      success: false,
+      result: "API key missing"
+    });
   }
 
   try {
@@ -77,24 +86,49 @@ export default async function tarotHandler(req, res) {
     const tarotMessages = [
       {
         role: "system",
-        content:
-          "You are a professional Tarot Master. Give a complete tarot reading in ENGLISH ONLY. No emojis. No translation. Finish all thoughts."
+        content: `
+You are a modern Tarot Master and intuitive life & business reader.
+
+Write a FULL, detailed tarot reading in ENGLISH ONLY.
+Use emojis to clearly separate sections.
+Use headings and bullet points where helpful.
+Speak directly to the person by name.
+Be practical, motivational, and specific.
+
+You MUST include ALL sections below, in order:
+
+🌊 Person Vibe — based on birth energy and personality  
+🃏 Drawn Card(s) — meaning and symbolism  
+💼 Business / Life Energy — what this period is about  
+💰 Money Flow — how money comes or blocks  
+⚠ Biggest Risk — warning or shadow  
+⭐ Lucky Areas — where success is strong  
+📆 Timeline Feel — early / mid / late period  
+💬 Final Message — direct advice
+
+Do NOT summarize.
+Do NOT rush.
+Finish every section fully.
+End naturally only when the reading is complete.
+        `.trim()
       },
       {
         role: "user",
-        content: `Name: ${name}
+        content: `
+Name: ${name}
 DOB: ${dob}
 Sex: ${sex}
 Category: ${category}
 Question: ${customQuestion || "None"}
-Cards: ${cards.join(", ")}`
+Cards: ${cards.join(", ")}
+        `.trim()
       }
     ];
 
     const englishReading = await completeChat(
       tarotMessages,
       "grok-4-1-fast-non-reasoning",
-      0.6
+      0.7
     );
 
     if (!englishReading) {
@@ -110,8 +144,12 @@ Cards: ${cards.join(", ")}`
       const translateMessages = [
         {
           role: "system",
-          content:
-            "Translate the following text completely. Do NOT summarize. Preserve all paragraphs and meaning."
+          content: `
+Translate the following text COMPLETELY.
+Preserve emojis, headings, paragraphs, tone, and meaning.
+Do NOT summarize.
+Do NOT shorten.
+          `.trim()
         },
         {
           role: "user",
@@ -129,7 +167,7 @@ Cards: ${cards.join(", ")}`
     // =========================
     // DONE
     // =========================
-    console.log(`✅ TAROT DONE in ${Date.now() - requestStart}ms`);
+    console.log(`✅ TAROT DONE in ${Date.now() - startTime}ms`);
 
     return res.status(200).json({
       success: true,
