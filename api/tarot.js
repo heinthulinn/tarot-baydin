@@ -3,27 +3,21 @@ import fetch from "node-fetch";
 
 export default async function handler(req, res) {
   console.log("🔥 /tarot HIT");
-  console.log("METHOD:", req.method);
 
   // =========================
-  // CORS (MUST BE FIRST)
+  // CORS
   // =========================
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
-    console.log("🟡 OPTIONS preflight");
     return res.status(200).end();
   }
 
   if (req.method !== "POST") {
-    console.log("❌ Invalid method");
     return res.status(405).json({ error: "Method not allowed" });
   }
-
-  console.log("HEADERS:", req.headers);
-  console.log("BODY:", req.body);
 
   // =========================
   // HELPERS
@@ -31,14 +25,12 @@ export default async function handler(req, res) {
   function normalizeLanguage(lang) {
     if (!lang) return "en";
     lang = lang.toLowerCase();
-
     if (lang === "my" || lang === "my-mm" || lang === "burmese" || lang === "myanmar") return "my";
     if (lang === "th" || lang === "th-th" || lang === "thai") return "th";
     if (lang === "ja" || lang === "ja-jp" || lang === "japanese") return "ja";
     if (lang === "zh" || lang.startsWith("zh")) return "zh";
     if (lang === "ko" || lang === "ko-kr") return "ko";
     if (lang === "vi" || lang === "vi-vn") return "vi";
-
     return "en";
   }
 
@@ -54,8 +46,20 @@ export default async function handler(req, res) {
     }
   }
 
-  async function callXAI(messages) {
-    console.log("📡 Calling XAI API...");
+  // =========================
+  // INPUT & VALIDATION
+  // =========================
+  const { name, dob, sex, category, customQuestion, cards, language } = req.body || {};
+
+  if (!name || !dob || !sex || !category || !cards || !Array.isArray(cards) || !language) {
+    return res.status(400).json({ success: false, result: "Missing required fields" });
+  }
+
+  const normalizedLang = normalizeLanguage(language);
+  const targetLanguageName = getLanguageName(normalizedLang);
+
+  try {
+    console.log(`🃏 Master reading for ${name}...`);
 
     const response = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
@@ -65,97 +69,47 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "grok-4-latest",
-        messages
+        temperature: 0.8, // Increased for more "human" and soulful writing
+        messages: [
+          {
+            role: "system",
+            content: `
+              You are a highly respected, ancient, and deeply intuitive Tarot Master and Spiritual Guide. 
+              The user, ${name}, is sitting before you seeking deep truth.
+
+              INSTRUCTIONS FOR THE MASTER:
+              - Speak with compassion, authority, and mystery. 
+              - Use the user's details: Name (${name}), Birth Date (${dob}), and Sex (${sex}) to personalize the reading. 
+              - Calculate their astrological/numerological vibration based on their DOB to set the tone.
+              - Focus deeply on their category (${category}) and their specific question: "${customQuestion}".
+              - Do NOT list the cards in a boring way (e.g., "Card 1: ..."). Instead, weave them into a single, beautiful, flowing story.
+              - Explain how the cards interact with each other. For example: "The energy of the first card flows into the next, showing that..."
+              - Provide a final, powerful piece of "Master's Advice" at the end.
+
+              FORMATTING RULES:
+              - Respond ONLY in ${targetLanguageName}.
+              - Use natural paragraphs. NO bullet points. NO English words.
+              - Use the user's name throughout the reading to make it feel intimate.
+            `
+          },
+          {
+            role: "user",
+            content: `Master, I am ${name}, born on ${dob} (${sex}). I seek guidance regarding my ${category}. My heart asks: "${customQuestion}". The cards drawn are: ${cards.join(", ")}.`
+          }
+        ]
       })
     });
 
-    console.log("📡 XAI status:", response.status);
-
     const data = await response.json();
-    console.log("📡 XAI raw response:", data);
+    const tarotText = data?.choices?.[0]?.message?.content || "";
 
-    return data?.choices?.[0]?.message?.content || "";
-  }
+    if (!tarotText) throw new Error("Spirits are silent (Empty response)");
 
-  // =========================
-  // INPUT
-  // =========================
-  const {
-    name,
-    dob,
-    sex,
-    category,
-    customQuestion,
-    cards,
-    language
-  } = req.body || {};
-
-  // =========================
-  // VALIDATION
-  // =========================
-  if (
-    !name ||
-    !dob ||
-    !sex ||
-    !category ||
-    !cards ||
-    !Array.isArray(cards) ||
-    cards.length === 0 ||
-    !language
-  ) {
-    console.log("❌ Validation failed");
-    return res.status(400).json({
-      success: false,
-      result: "Missing required fields"
-    });
-  }
-
-  const normalizedLang = normalizeLanguage(language);
-  const targetLanguageName = getLanguageName(normalizedLang);
-
-  try {
-    console.log("🃏 Generating tarot reading...");
-
-    const tarotText = await callXAI([
-      {
-        role: "system",
-        content: `
-You are an ancient Tarot Master and Destiny Oracle.
-
-IMPORTANT:
-- Respond ONLY in ${targetLanguageName}
-- Do NOT include English
-`
-      },
-      {
-        role: "user",
-        content: `
-Name: ${name}
-Date of Birth: ${dob}
-Sex: ${sex}
-Life Category: ${category}
-Question: ${customQuestion || "No specific question"}
-Cards: ${cards.join(", ")}
-`
-      }
-    ]);
-
-    if (!tarotText) {
-      throw new Error("Empty tarot response");
-    }
-
-    console.log("✅ Tarot success");
-
-    return res.status(200).json({
-      success: true,
-      result: tarotText
-    });
+    console.log("✅ Deep reading complete");
+    return res.status(200).json({ success: true, result: tarotText });
 
   } catch (err) {
     console.error("❌ TAROT ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      result: "Tarot spirits failed to respond."
-    });
+    return res.status(500).json({ success: false, result: "The connection to the spiritual realm was interrupted. Please try again." });
   }
 }
