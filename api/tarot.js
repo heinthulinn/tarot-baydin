@@ -41,7 +41,7 @@ export default async function tarotHandler(req, res) {
         "Authorization": `Bearer ${process.env.XAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "grok-2-latest",
+        model: "grok-beta",
         temperature: 0.6,
         max_tokens: 600,
         messages: [
