@@ -58,8 +58,16 @@ export default async function handler(req, res) {
   const normalizedLang = normalizeLanguage(language);
   const targetLanguageName = getLanguageName(normalizedLang);
 
+  // Log request details
+  console.log(`📋 Request: ${name} | ${category} | ${cards.length} cards | ${normalizedLang}`);
+
   try {
-    console.log(`🃏 Master reading for ${name}...`);
+    const startTime = Date.now();
+    console.log(`🃏 Starting reading for ${name}...`);
+
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
     const response = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
@@ -69,47 +77,67 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "grok-4-latest",
-        temperature: 0.8, // Increased for more "human" and soulful writing
+        temperature: 0.7, // Slightly lower for more focused responses
+        max_tokens: 1500, // Limit response length for faster generation
         messages: [
           {
             role: "system",
-            content: `
-              You are a highly respected, ancient, and deeply intuitive Tarot Master and Spiritual Guide. 
-              The user, ${name}, is sitting before you seeking deep truth.
+            content: `You are a wise Tarot Master. Give a clear, meaningful reading in ${targetLanguageName} only. 
 
-              INSTRUCTIONS FOR THE MASTER:
-              - Speak with compassion, authority, and mystery. 
-              - Use the user's details: Name (${name}), Birth Date (${dob}), and Sex (${sex}) to personalize the reading. 
-              - Calculate their astrological/numerological vibration based on their DOB to set the tone.
-              - Focus deeply on their category (${category}) and their specific question: "${customQuestion}".
-              - Do NOT list the cards in a boring way (e.g., "Card 1: ..."). Instead, weave them into a single, beautiful, flowing story.
-              - Explain how the cards interact with each other. For example: "The energy of the first card flows into the next, showing that..."
-              - Provide a final, powerful piece of "Master's Advice" at the end.
-
-              FORMATTING RULES:
-              - Respond ONLY in ${targetLanguageName}.
-              - Use natural paragraphs. NO bullet points. NO English words.
-              - Use the user's name throughout the reading to make it feel intimate.
-            `
+RULES:
+- Write in ${targetLanguageName} ONLY. No English.
+- Keep it focused and meaningful (3-4 paragraphs max).
+- Weave the cards (${cards.join(", ")}) into a flowing story, not a list.
+- Address ${name}'s question about ${category}: "${customQuestion}"
+- End with brief, actionable advice.
+- Use ${name}'s name naturally 2-3 times.
+- Be compassionate but direct.`
           },
           {
             role: "user",
-            content: `Master, I am ${name}, born on ${dob} (${sex}). I seek guidance regarding my ${category}. My heart asks: "${customQuestion}". The cards drawn are: ${cards.join(", ")}.`
+            content: `I am ${name} (${dob}, ${sex}). My question: "${customQuestion}" in ${category}. Cards: ${cards.join(", ")}.`
           }
         ]
-      })
+      }),
+      signal: controller.signal
     });
 
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error("❌ X.AI API Error:", response.status, errorData);
+      throw new Error(`API returned ${response.status}`);
+    }
+
     const data = await response.json();
-    const tarotText = data?.choices?.[0]?.message?.content || "";
+    let tarotText = data?.choices?.[0]?.message?.content || "";
 
-    if (!tarotText) throw new Error("Spirits are silent (Empty response)");
+    if (!tarotText) throw new Error("Empty response from API");
 
-    console.log("✅ Deep reading complete");
+    // Clean up response - remove any markdown formatting if present
+    tarotText = tarotText.trim();
+    
+    // Limit response length if too long (safety check)
+    if (tarotText.length > 3000) {
+      tarotText = tarotText.substring(0, 3000) + "...";
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`✅ Reading complete (${tarotText.length} chars, ${duration}ms)`);
     return res.status(200).json({ success: true, result: tarotText });
 
   } catch (err) {
     console.error("❌ TAROT ERROR:", err);
-    return res.status(500).json({ success: false, result: "The connection to the spiritual realm was interrupted. Please try again." });
+    
+    // More specific error messages
+    let errorMessage = "The connection was interrupted. Please try again.";
+    if (err.name === 'AbortError') {
+      errorMessage = "The reading took too long. Please try again.";
+    } else if (err.message.includes('API')) {
+      errorMessage = "Service temporarily unavailable. Please try again later.";
+    }
+    
+    return res.status(500).json({ success: false, result: errorMessage });
   }
 }
