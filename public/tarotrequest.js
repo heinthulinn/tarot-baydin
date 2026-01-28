@@ -1,9 +1,12 @@
-// Load HTML into index.html
 fetch("tarotrequest.html")
-  .then(res => res.text())
+  .then(res => {
+    if (!res.ok) throw new Error("HTML not found");
+    return res.text();
+  })
   .then(html => {
     document.getElementById("tarotrequest-root").innerHTML = html;
-  });
+  })
+  .catch(err => console.error(err));
 
 function sendTarotRequest() {
   const gender = document.querySelector('input[name="tr-gender"]:checked');
@@ -17,5 +20,5 @@ function sendTarotRequest() {
     category: document.getElementById("tr-category").value
   };
 
-  SendTarotUserData(JSON.stringify(data)); // jslib → Unity
+  SendTarotUserData(JSON.stringify(data)); // later → jslib
 }
