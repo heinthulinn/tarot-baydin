@@ -1,27 +1,91 @@
+/* Overlay locked to Unity canvas */
 #tarotrequest-ui {
-  position: absolute;
-  top: 0;
-  left: 0;
-
-  width: 600px;
-  height: 960px;
-
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.85);
-
+  position: fixed;
+  inset: 0;
   display: flex;
-  flex-direction: column;
   justify-content: center;
-  gap: 12px;
-
-  padding: 20px;
-  box-sizing: border-box;
+  pointer-events: auto;
+  z-index: 9999;
 }
 
-/* Match Unity canvas scaling */
-@media (max-width: 768px) {
-  #tarotrequest-ui {
-    width: 100vw;
-    height: 100vh;
-  }
+/* Main form */
+.tarot-form {
+  width: 360px;
+  padding: 30px 20px;
+  text-align: center;
+  color: #f5f5f5;
+  font-family: "Georgia", serif;
+}
+
+/* Title */
+.title {
+  font-size: 34px;
+  margin-bottom: 20px;
+  font-weight: normal;
+}
+
+/* Fake icon placeholder */
+.icon {
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 25px;
+  background: url("icon.png") center / contain no-repeat;
+}
+
+/* Labels */
+.label {
+  margin-top: 18px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  letter-spacing: 2px;
+  opacity: 0.9;
+}
+
+/* Inputs */
+input,
+select {
+  width: 100%;
+  height: 42px;
+  background: linear-gradient(#0f0f0f, #1e1e1e);
+  border: 1px solid #000;
+  color: #ccc;
+  font-size: 15px;
+  text-align: center;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+}
+
+/* Row layout */
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.row input {
+  flex: 1;
+}
+
+.row.center {
+  justify-content: center;
+  gap: 20px;
+}
+
+label {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+/* Button */
+button {
+  margin-top: 26px;
+  width: 140px;
+  height: 44px;
+  background: linear-gradient(#111, #222);
+  border: 1px solid #000;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: linear-gradient(#222, #333);
 }
