@@ -1,35 +1,23 @@
 <div id="tarotrequest-ui">
-  <div class="tarot-form">
+  <input id="tr-name" placeholder="Name" />
 
-    <h1 class="title">Tarot Bay Din</h1>
-
-    <div class="icon"></div>
-
-    <div class="label">NAME</div>
-    <input id="tr-name" placeholder="Enter name..." />
-
-    <div class="label">DATE OF BIRTH</div>
-    <div class="row">
-      <input id="tr-day" placeholder="Date" />
-      <input id="tr-month" placeholder="Month" />
-      <input id="tr-year" placeholder="Year" />
-    </div>
-
-    <div class="label">Gender</div>
-    <div class="row center">
-      <label><input type="radio" name="tr-gender" value="Male"> Male</label>
-      <label><input type="radio" name="tr-gender" value="Female"> Female</label>
-    </div>
-
-    <div class="label">SELECT THE CATEGORY</div>
-    <select id="tr-category">
-      <option value="">Select</option>
-      <option value="Love">Love</option>
-      <option value="Career">Career</option>
-      <option value="Health">Health</option>
-    </select>
-
-    <button onclick="sendTarotRequest()">Next</button>
-
+  <div class="row">
+    <input id="tr-day" placeholder="DD" />
+    <input id="tr-month" placeholder="MM" />
+    <input id="tr-year" placeholder="YYYY" />
   </div>
+
+  <div class="row">
+    <label><input type="radio" name="tr-gender" value="Male"> Male</label>
+    <label><input type="radio" name="tr-gender" value="Female"> Female</label>
+  </div>
+
+  <select id="tr-category">
+    <option value="">Category</option>
+    <option value="Love">Love</option>
+    <option value="Career">Career</option>
+    <option value="Health">Health</option>
+  </select>
+
+  <button onclick="sendTarotRequest()">Next</button>
 </div>
